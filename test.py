@@ -20,20 +20,18 @@ import time
 import PIL
 PIL.Image.MAX_IMAGE_PIXELS = 933120000
 
-
 # Parse args
 parser = argparse.ArgumentParser(description='Faster R-CNN algorithm for whales detection-- testing step')
 parser.add_argument('--model_path',type=str, help="path to download the training model")
 parser.add_argument('--input_path',type=str, help="path to the large input image")
 parser.add_argument('--output_path',type=str, help="path to save the output detections")
-parser.add_argument('--num_classes',type=int,default=7, help="number of classes")
+parser.add_argument('--num_classes',type=int,default=5, help="number of classes")
 parser.add_argument('--box_score',type=float,default=0.01, help="box score thresh")
 parser.add_argument('--box_nms',type=float,default=0.2, help="box Non Maximum Suppression thresh")
 parser.add_argument('--chopsize',default=800,type=int, help="size of sliding window")
 parser.add_argument('--overlap',default=0.5,type=float, help="overlapping thresh")
 
 args = parser.parse_args()
-
 
 #####transformations
 def get_transform(train):
@@ -127,13 +125,13 @@ start_test_perlargeimg = time.time()
 for filename in os.listdir(directory):
     k=1   
     a=1
-
+    
     if filename.endswith(".png"): 
         with open(args.output_path +'names/'+ filename[19:-29] + '.'  +'names.txt', 'w') as f:
             images, image_ids = ortho_image_splitter(directory+filename,chopsize=args.chopsize, overlap = args.overlap)    
             for j in range(len(images)):
               image_id = [image_ids[j]]  
-              image = [images[j]]           
+              image = [images[j]]
               test_dataset = Orthoimage_Data(image_id,image,get_transform(train=False))
               test_data_loader = torch.utils.data.DataLoader(
                   test_dataset,
@@ -144,39 +142,27 @@ for filename in os.listdir(directory):
               )
               image_id=str(image_id)
               model.eval()
-             
               cpu_device = torch.device("cpu")
               imgs, img_ids = next(iter(test_data_loader))
               imgs = list(img.to(device) for img in imgs)
               output = model(imgs)
               output = [{k: v.to(cpu_device) for k, v in t.items()} for t in output]
-
-              boxes = [] 
-              scores = [] 
-              classes = []
-              boxess = torch.FloatTensor(output[0]['boxes'].data.cpu().numpy())
-              scoress = torch.FloatTensor(output[0]['scores'].data.cpu().numpy())
-              classess= torch.FloatTensor(output[0]['labels'].data.cpu().numpy())
-              keep = torchvision.ops.nms(boxess, scoress, 0.01)
-              for ke in keep:
-                  boxes.append(boxess[ke])
-                  scores.append(scoress[ke])
-                  classes.append(classess[ke])
-
+              boxes = output[0]['boxes'].data.cpu().numpy()
+              scores = output[0]['scores'].data.cpu().numpy()
+              classes= output[0]['labels'].data.cpu().numpy()
               for img in imgs:
                   sn = ""
                   dd= ""
-
                   img = img.permute(1,2,0)
-                  img = (img * 255).byte().data.cpu()  
-                  img = np.array(img)  
+                  img = (img * 255).byte().data.cpu()  # * 255, float to 0-255
+                  img = np.array(img)  # tensor → ndarray
                   bx=0
-                  for y in range(len(boxes)):
-                      xmin = round(boxes[y][0].item())
-                      ymin = round(boxes[y][1].item())
-                      xmax = round(boxes[y][2].item())
-                      ymax = round(boxes[y][3].item())
-                      label = classes[y].item()
+                  for y in range(output[0]['boxes'].cpu().shape[0]):
+                      xmin = round(output[0]['boxes'][y][0].item())
+                      ymin = round(output[0]['boxes'][y][1].item())
+                      xmax = round(output[0]['boxes'][y][2].item())
+                      ymax = round(output[0]['boxes'][y][3].item())
+                      label = output[0]['labels'][y].item()
                       if (xmax-xmin)>= 3 and (xmax-xmin)< 120 and (ymax-ymin)>= 3 and (ymax-ymin)< 120:
                             
                           if label == 1:
@@ -187,13 +173,13 @@ for filename in os.listdir(directory):
                               sn+= str(bx) + '_' + str(xmin) + '_' + str(ymin) + '_'+ str(xmax) + '_' + str(ymax) + '_'
     
                     
-                              bx+=1                                
+                              bx+=1
                   if  dd :
                       plt.imsave(args.output_path+filename[19:-29]+ '.' + str(a)+ '.'+ dd+'.png', img)
-                      f.write(filename[19:-29]+ '.' +str(a)+ image_id[6:-6] + '.'+sn + '\n')  
+                      f.write(filename[19:-29]+ '.' +str(a)+ image_id[6:-6] + '.'+sn + '\n')
                       a+=1
 
 
 end_test = time.time()
 print("test time per one large image", end_test - start_test_perlargeimg)  
-
+  
